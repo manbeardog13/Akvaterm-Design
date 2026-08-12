@@ -9,7 +9,10 @@ This folder contains the pre-implementation documentation required before code c
 - Phase 2: Complete documentation foundation delivered.
 - Phase 3: Prototype and review loops in progress — motion system and real step
   controls landed 2026-08-12; review loops continue.
-- Phase 4: Implementation pending council sign-off.
+- Phase 4: Scaffolding started 2026-08-12 — milestone 4 gate held early at
+  Toni's direction (ADR 0005–0007); vision adapter boundary, isometric
+  reconstruction and confidence-aware handoff in place against the mock
+  adapter. Codex ratification pending post 2026-08-18.
 
 ## Delivery checklist
 
@@ -26,8 +29,8 @@ This folder contains the pre-implementation documentation required before code c
 - [x] AI Vision Pipeline
 - [x] Recommendation Engine Architecture
 - [x] Multi-Agent Review Report
-- [ ] ADR set for all major decisions (0001–0004 drafted; milestone 4 gate
-  decisions still open)
+- [ ] ADR set for all major decisions (0001–0007 recorded; real vision backend,
+  asset pipeline at scale and CI still open)
 
 ## Files
 

@@ -14,8 +14,9 @@ Premium bathroom renovation journey for local renovation customers.
 
 ## Repository status
 
-- Stage: Milestone 2 shell complete; milestone 3 interactive pass 1 landed
-  (motion system, real step controls, ADR 0003–0004).
+- Stage: Milestone 3 interactive pass complete; milestone 4 scaffolded — vision
+  adapter boundary, second-angle flow, isometric reconstruction view, and
+  confidence-aware handoff exports (ADR 0005–0007, mock adapter).
 - Canonical remote: https://github.com/manbeardog13/Akvaterm-Design.git
 
 ## Documentation
@@ -39,3 +40,16 @@ python -m http.server 8000
 
 No build step and no dependencies — a static server is only needed because the
 app uses native ES modules, which browsers block over `file://`.
+
+## Development checks
+
+Runtime has zero dependencies; the E2E suite is dev-only (ADR 0007):
+
+```
+npm install
+npx playwright install chromium
+npm test
+```
+
+Set `PLAYWRIGHT_CHROMIUM_PATH` to reuse an existing Chromium build instead of
+downloading one.

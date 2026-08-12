@@ -25,6 +25,11 @@
 - Add user confirmation controls for detected fixtures
 - Add confidence-aware handoff exports
 
+Status 2026-08-12: scaffolded against the mock adapter (ADR 0005–0007) — the
+service boundary, confirmation controls with second-angle flow, isometric
+reconstruction view and confidence-aware exports are in place. A real vision
+backend remains open for the ratification review.
+
 ## Milestone 5: Recommendation layer
 
 - Add curated recommendation cards with rationale

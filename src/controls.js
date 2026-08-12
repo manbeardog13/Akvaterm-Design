@@ -10,7 +10,6 @@ import {
   WALLS,
   FIXTURE_TYPES,
   CONFIDENCE_FLOOR,
-  mockDetections,
   RECOMMENDATION_GROUPS,
   scopeRecommendations,
   expertAlternative,
@@ -21,6 +20,8 @@ import {
   fixtureGroups,
   lightingDefaults,
 } from "./data.js";
+import { VisionService } from "./services/vision.js";
+import { renderIso } from "./isometric.js";
 
 // ---------------------------------------------------------------------------
 // Small DOM helper.
@@ -504,6 +505,9 @@ function detectControl(step, ctx) {
       v.mode = "sketch";
       v.items = [];
       v.complete = false;
+      v.detected = false;
+      v.vision = null;
+      v.secondAngles = 0;
     }
     const list = h("div", { class: "sketch-grid", role: "group", "aria-label": "Fixtures present in your bathroom" });
     const status = h("p", { class: "control-note", role: "status" });
@@ -580,14 +584,19 @@ function detectControl(step, ctx) {
     };
   }
 
-  // Photo mode: mock vision pass, then explicit per-item confirmation.
-  const v = ctx.own({ mode: "vision", items: mockDetections(capture.capturedWalls || []) });
+  // Photo mode: detection runs through the VisionService adapter boundary
+  // (ADR 0006), then every item waits for an explicit per-item confirmation.
+  const v = ctx.own({ mode: "vision", items: null, detected: false, vision: null, secondAngles: 0 });
   if (v.mode !== "vision") {
     v.mode = "vision";
-    v.items = mockDetections(capture.capturedWalls || []);
+    v.items = null;
+    v.detected = false;
+    v.vision = null;
+    v.secondAngles = 0;
   }
   const listEl = h("div", { class: "detect-list" });
   const status = h("p", { class: "control-note", role: "status" });
+  const progressLine = h("p", { class: "detect-progress", role: "status", "aria-live": "polite", hidden: true });
 
   function resolvedCount() {
     return v.items.filter((i) => i.status !== "pending").length;
@@ -598,19 +607,34 @@ function detectControl(step, ctx) {
   }
 
   function statusLine() {
+    if (!v.detected) return;
     status.textContent = `${resolvedCount()} of ${v.items.length} detections resolved. Every item waits for your explicit decision.`;
   }
 
   // Rows are built once and synced in place — decisions never steal focus.
   function itemRow(item) {
-    const lowConf = item.confidence < CONFIDENCE_FLOOR;
     const chip = h("span", { class: "chip" });
     const typeEl = h("strong", { class: "detect-type", text: item.type });
-    const flag = h("p", {
-      class: "detect-flag",
-      hidden: true,
-      text: "Low confidence — a second-angle photo would help. You can still decide manually.",
+    const confFill = h("span", { class: "conf-fill" });
+    const confMeter = h("span", { class: "conf-meter", role: "img" }, confFill);
+    const note = h("p", { class: "detect-flag", hidden: true });
+    const angleInput = h("input", {
+      type: "file",
+      accept: "image/*",
+      class: "visually-hidden",
+      id: `angle-${item.id}`,
+      onChange: async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const res = await VisionService.requestSecondAngle(item, { name: file.name });
+        item.confidence = res.confidence;
+        item.secondAngle = true;
+        v.secondAngles += 1;
+        sync();
+        ctx.onChange();
+      },
     });
+    const angleLabel = h("label", { class: "btn btn-ghost btn-small", for: `angle-${item.id}`, hidden: true, text: "Add second angle" });
     const adjustSelect = h(
       "select",
       {
@@ -653,22 +677,32 @@ function detectControl(step, ctx) {
         chip,
         typeEl,
         h("span", { class: "detect-wall", text: wallLabel(item.wall) }),
-        h(
-          "span",
-          { class: "conf-meter", role: "img", "aria-label": `Confidence ${(item.confidence * 100).toFixed(0)} percent` },
-          h("span", { class: "conf-fill", style: `width:${(item.confidence * 100).toFixed(0)}%` })
-        )
+        confMeter
       ),
-      flag,
+      note,
       adjustSelect,
-      h("div", { class: "detect-actions" }, actions)
+      h("div", { class: "detect-actions" }, actions, angleLabel, angleInput)
     );
 
     function sync() {
       row.className = `detect-row detect-row--${item.status}`;
       chip.textContent = statusLabel(item.status);
       chip.className = `chip chip--${item.status}`;
-      flag.hidden = !(lowConf && item.status === "pending");
+      confFill.style.width = `${(item.confidence * 100).toFixed(0)}%`;
+      confMeter.setAttribute("aria-label", `Confidence ${(item.confidence * 100).toFixed(0)} percent`);
+      const needsAngle = item.confidence < CONFIDENCE_FLOOR && item.status === "pending";
+      angleLabel.hidden = !needsAngle;
+      if (needsAngle) {
+        note.hidden = false;
+        note.className = "detect-flag";
+        note.textContent = "Low confidence — a second-angle photo would help. You can still decide manually.";
+      } else if (item.secondAngle) {
+        note.hidden = false;
+        note.className = "detect-flag detect-flag--ok";
+        note.textContent = `Second angle received — confidence improved to ${(item.confidence * 100).toFixed(0)}%.`;
+      } else {
+        note.hidden = true;
+      }
       adjustSelect.hidden = item.status !== "adjusted";
       for (const b of actions) {
         const active = item.status === b.dataset.status;
@@ -681,20 +715,52 @@ function detectControl(step, ctx) {
     return row;
   }
 
-  listEl.append(...v.items.map(itemRow));
-  statusLine();
+  function mountRows() {
+    progressLine.hidden = true;
+    listEl.replaceChildren(...v.items.map(itemRow));
+    statusLine();
+  }
+
+  async function run() {
+    if (v.detected) {
+      mountRows();
+      return;
+    }
+    progressLine.hidden = false;
+    progressLine.textContent = "Preparing analysis…";
+    const result = await VisionService.detect(
+      { walls: capture.capturedWalls || [], photosByWall: capture.photoNames || {} },
+      {
+        onProgress: (p) => {
+          progressLine.textContent = `${p.stage} — step ${p.index} of ${p.total}. Nothing is accepted without you.`;
+        },
+      }
+    );
+    v.items = result.detections;
+    v.detected = true;
+    v.vision = { adapter: result.adapter, confidenceFloor: result.confidenceFloor, buckets: result.buckets };
+    mountRows();
+    ctx.onChange();
+  }
+  run();
 
   const el = h(
     "div",
     { class: "control control-detect" },
+    progressLine,
     listEl,
     status
   );
 
   return {
     el,
-    isSatisfied: () => v.items.every((i) => i.status !== "pending"),
-    value: () => ({ mode: "vision", items: v.items.map((i) => ({ ...i })) }),
+    isSatisfied: () => v.detected && v.items.every((i) => i.status !== "pending"),
+    value: () => ({
+      mode: "vision",
+      items: v.items.map((i) => ({ ...i })),
+      vision: v.vision,
+      secondAngleRequests: v.secondAngles,
+    }),
     summary: () => {
       const c = v.items.filter((i) => i.status === "confirmed" || i.status === "adjusted").length;
       return `${c} fixture(s) verified, ${v.items.filter((i) => i.status === "rejected").length} removed`;
@@ -711,7 +777,7 @@ function rebuildControl(step, ctx) {
   const detect = ctx.values.detect || { items: [] };
   const kept = detect.items.filter((i) => i.status === "confirmed" || i.status === "adjusted");
   const excluded = detect.items.filter((i) => i.status === "rejected");
-  const v = ctx.own({ verified: false });
+  const v = ctx.own({ verified: false, view: "iso" });
 
   const planWrap = h("div", { class: "plan-wrap plan-wrap--tall" });
   const caption = h("p", { class: "control-note", role: "status", "aria-live": "polite" });
@@ -729,16 +795,44 @@ function rebuildControl(step, ctx) {
     },
   });
 
+  const viewBtns = [
+    ["iso", "Isometric"],
+    ["plan", "Top-down"],
+  ].map(([view, label]) =>
+    h("button", {
+      type: "button",
+      class: "btn btn-chip",
+      dataset: { view },
+      "aria-pressed": "false",
+      text: label,
+      onClick: () => {
+        if (v.view === view) return;
+        v.view = view;
+        build();
+      },
+    })
+  );
+
   function build() {
+    for (const b of viewBtns) {
+      const active = b.dataset.view === v.view;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-pressed", String(active));
+    }
     planWrap.replaceChildren();
-    const { svg } = renderPlan(dims, { door, fixtures: kept });
+    const { svg } =
+      v.view === "iso" ? renderIso(dims, { door, fixtures: kept }) : renderPlan(dims, { door, fixtures: kept });
     planWrap.append(svg);
     // Progressive reveal: fixtures appear one by one (camera-choreography pacing,
     // no movement for elements below the confidence floor unless user-verified).
-    const nodes = svg.querySelectorAll(".plan-fixture, .plan-fixture-label");
+    const nodes =
+      v.view === "iso"
+        ? svg.querySelectorAll("g.iso-fixture")
+        : svg.querySelectorAll(".plan-fixture, .plan-fixture-label");
     let idx = 0;
+    const perStep = v.view === "iso" ? 1 : 2;
     for (const node of nodes) {
-      const delay = ctx.motion.reduced ? 0 : 240 * Math.floor(idx / 2);
+      const delay = ctx.motion.reduced ? 0 : 240 * Math.floor(idx / perStep);
       node.style.opacity = "0";
       const anim = node.animate ? ctx.motion.surfaceReveal(node, { delay }) : null;
       if (anim) anim.finished.then(() => (node.style.opacity = "1")).catch(() => (node.style.opacity = "1"));
@@ -754,6 +848,7 @@ function rebuildControl(step, ctx) {
   const el = h(
     "div",
     { class: "control control-rebuild" },
+    h("div", { class: "chip-row", role: "group", "aria-label": "Model view" }, viewBtns),
     planWrap,
     caption,
     h("div", { class: "chip-row" }, verifyBtn)

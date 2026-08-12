@@ -27,6 +27,11 @@
   box-sizing: border-box;
 }
 
+/* The hidden attribute always wins, regardless of component display rules. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -659,6 +664,100 @@ label.btn.is-disabled {
   color: var(--warn);
   font-size: 0.82rem;
   margin: 8px 0 0;
+}
+
+.detect-flag--ok {
+  color: var(--ok);
+}
+
+.detect-progress {
+  color: var(--accent-strong);
+  font-size: 0.88rem;
+  letter-spacing: 0.02em;
+  animation: progressPulse 1400ms var(--ease-camera) infinite alternate;
+}
+
+@keyframes progressPulse {
+  from {
+    opacity: 0.65;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Isometric reconstruction view (ADR 0005) */
+
+.iso-floor {
+  fill: rgba(111, 180, 200, 0.1);
+  stroke: rgba(244, 247, 251, 0.35);
+  stroke-width: 1;
+}
+
+.iso-wall {
+  stroke: rgba(244, 247, 251, 0.4);
+  stroke-width: 1;
+}
+
+.iso-wall--left {
+  fill: rgba(244, 247, 251, 0.07);
+}
+
+.iso-wall--right {
+  fill: rgba(244, 247, 251, 0.13);
+}
+
+.iso-parapet {
+  fill: rgba(244, 247, 251, 0.16);
+  stroke: rgba(244, 247, 251, 0.45);
+  stroke-width: 1;
+}
+
+.iso-door {
+  fill: rgba(183, 221, 242, 0.42);
+  stroke: var(--accent-strong);
+  stroke-width: 1.2;
+}
+
+.iso-panel {
+  fill: rgba(183, 221, 242, 0.22);
+  stroke: rgba(183, 221, 242, 0.65);
+  stroke-width: 1;
+}
+
+.iso-face {
+  stroke: rgba(183, 221, 242, 0.55);
+  stroke-width: 0.8;
+}
+
+.iso-face--top {
+  fill: rgba(111, 180, 200, 0.5);
+}
+
+.iso-face--front {
+  fill: rgba(111, 180, 200, 0.24);
+}
+
+.iso-face--side {
+  fill: rgba(111, 180, 200, 0.36);
+}
+
+.iso-fixture--adjusted .iso-face--top {
+  fill: rgba(228, 192, 126, 0.5);
+}
+
+.iso-fixture--adjusted .iso-face--front {
+  fill: rgba(228, 192, 126, 0.24);
+}
+
+.iso-fixture--adjusted .iso-face--side {
+  fill: rgba(228, 192, 126, 0.36);
+}
+
+.iso-fixture--adjusted .iso-face,
+.iso-panel--adjusted {
+  stroke: var(--warn);
 }
 
 .detect-adjust {

@@ -1,0 +1,12 @@
+{
+  "name": "akvaterm-design",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Akvaterm Signature Bathroom Journey — dependency-free prototype with dev-only E2E tooling",
+  "scripts": {
+    "test": "node tests/e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}

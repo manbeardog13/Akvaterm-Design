@@ -30,10 +30,13 @@ const els = {
   restartBtn: document.getElementById("restart-btn"),
   handoffSummary: document.getElementById("handoff-summary"),
   handoffJson: document.getElementById("handoff-json"),
+  downloadBtn: document.getElementById("download-packet"),
+  copyBtn: document.getElementById("copy-packet"),
 };
 
 let state = null;
 let control = null;
+let lastPacket = null;
 
 function freshState(journeyKey) {
   return {
@@ -217,8 +220,10 @@ function buildPacket() {
           confidence: i.confidence,
           status: i.status,
           userVerified: i.userVerified,
+          secondAngle: Boolean(i.secondAngle),
         }))
       : [],
+    visionSummary: buildVisionSummary(v),
     styleProfile: isExisting
       ? { primaryStyle: "guided modernization", source: "existing-flow" }
       : {
@@ -248,8 +253,38 @@ function buildPacket() {
   };
 }
 
+// Confidence-aware summary for the sales handoff (milestone 4):
+// the sales team receives an interpretable confidence map, never raw guesses.
+function buildVisionSummary(v) {
+  if (v.detect && v.detect.mode === "vision" && v.detect.vision) {
+    const items = v.detect.items || [];
+    return {
+      adapter: v.detect.vision.adapter,
+      confidenceFloor: v.detect.vision.confidenceFloor,
+      buckets: v.detect.vision.buckets,
+      verified: items.filter((i) => i.userVerified && (i.status === "confirmed" || i.status === "adjusted")).length,
+      removed: items.filter((i) => i.status === "rejected").length,
+      excluded: items.filter((i) => i.status === "rejected").map((i) => i.type),
+      secondAngleRequests: v.detect.secondAngleRequests || 0,
+    };
+  }
+  if (v.detect && v.detect.mode === "sketch") {
+    return {
+      adapter: "manual-inventory",
+      confidenceFloor: null,
+      buckets: null,
+      verified: (v.detect.items || []).length,
+      removed: 0,
+      excluded: [],
+      secondAngleRequests: 0,
+    };
+  }
+  return null;
+}
+
 function renderHandoff() {
   const packet = buildPacket();
+  lastPacket = packet;
 
   els.workbench.hidden = true;
   els.handoff.hidden = false;
@@ -279,3 +314,27 @@ document.querySelectorAll("[data-select]").forEach((button) => {
 els.nextBtn.addEventListener("click", completeStep);
 els.backBtn.addEventListener("click", goBack);
 els.restartBtn.addEventListener("click", reset);
+
+els.downloadBtn.addEventListener("click", () => {
+  if (!lastPacket) return;
+  const blob = new Blob([JSON.stringify(lastPacket, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `akvaterm-handoff-${lastPacket.project.id}.json`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+});
+
+els.copyBtn.addEventListener("click", async () => {
+  if (!lastPacket) return;
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(lastPacket, null, 2));
+    els.copyBtn.textContent = "Copied";
+  } catch (_) {
+    els.copyBtn.textContent = "Copy blocked — use Download";
+  }
+  setTimeout(() => (els.copyBtn.textContent = "Copy JSON"), 1800);
+});
