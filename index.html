@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Akvaterm Signature Bathroom Journey</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="ambient-layer ambient-layer--morning"></div>
+      <main class="stage" aria-live="polite">
+        <header class="hero">
+          <p class="kicker">Akvaterm Signature Journey</p>
+          <h1>Design your bathroom with craft-led guidance</h1>
+          <p>Calm, cinematic, and confirmation-first. No rush, no catalogue overwhelm.</p>
+        </header>
+
+        <section id="journey-selector" class="card active">
+          <h2>Choose your journey</h2>
+          <p>Which space is this for today?</p>
+          <div class="button-row">
+            <button class="btn btn-primary" data-select="existing">Existing Bathroom</button>
+            <button class="btn btn-outline" data-select="new">New Bathroom</button>
+          </div>
+        </section>
+
+        <section id="journey-workbench" class="card" hidden>
+          <div class="status-row">
+            <span id="journey-title" class="kicker"></span>
+            <span id="progress"></span>
+          </div>
+          <h2 id="stage-title"></h2>
+          <p id="stage-copy"></p>
+
+          <div class="panel-stack">
+            <div class="panel">
+              <h3 id="step-title"></h3>
+              <p id="step-copy"></p>
+              <div id="step-content"></div>
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button class="btn btn-ghost" id="back-btn" disabled>Back</button>
+            <button class="btn btn-primary" id="next-btn" disabled>Continue</button>
+          </div>
+        </section>
+
+        <section id="handoff" class="card" hidden>
+          <h2>Handoff Summary</h2>
+          <p>Your journey profile is ready for expert review.</p>
+          <pre id="handoff-json" aria-label="journey summary"></pre>
+          <div class="button-row">
+            <button class="btn btn-primary" id="restart-btn">Start another journey</button>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>
+
