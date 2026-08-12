@@ -21,9 +21,9 @@ Define the animation grammar that feels intentional, premium, and calm.
 
 ## Speed tiers
 
-- Primary emotional actions: 280ms–450ms
-- Spatial moves: 900ms–1600ms
-- Long transition scenes: 1.8s–2.8s
+- Primary emotional actions: 280msâ€“450ms
+- Spatial moves: 900msâ€“1600ms
+- Long transition scenes: 1.8sâ€“2.8s
 
 ## Anti-patterns
 

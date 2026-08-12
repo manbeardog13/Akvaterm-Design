@@ -14,7 +14,8 @@ Premium bathroom renovation journey for local renovation customers.
 
 ## Repository status
 
-- Stage: Foundation docs complete (Phase 2) and implementation scaffold pending.
+- Stage: Milestone 2 shell complete; milestone 3 interactive pass 1 landed
+  (motion system, real step controls, ADR 0003–0004).
 - Canonical remote: https://github.com/manbeardog13/Akvaterm-Design.git
 
 ## Documentation
@@ -29,4 +30,12 @@ Premium bathroom renovation journey for local renovation customers.
 
 ## Run the prototype
 
-Open `index.html` directly in a browser. No build dependencies are required in this milestone.
+From the repo root, serve the folder with any static file server and open it:
+
+```
+python -m http.server 8000
+# then visit http://localhost:8000
+```
+
+No build step and no dependencies — a static server is only needed because the
+app uses native ES modules, which browsers block over `file://`.

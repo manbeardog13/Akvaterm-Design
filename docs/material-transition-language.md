@@ -24,7 +24,7 @@ Material changes should appear handcrafted and natural, not instant.
 
 ## Timing and controls
 
-- Duration: 1.2s–3.5s depending on surface area.
+- Duration: 1.2sâ€“3.5s depending on surface area.
 - Curve: cubic-bezier(0.19, 1, 0.22, 1)
 - Always cancelable with immediate revert.
 - If user reopens control before settle, continue from current frame.

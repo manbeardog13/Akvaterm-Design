@@ -4,11 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Akvaterm Signature Bathroom Journey</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3C10 12 7 17 7 21a9 9 0 0 0 18 0c0-4-3-9-9-18z' fill='%236fb4c8'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
     <div class="page-shell">
-      <div class="ambient-layer ambient-layer--morning"></div>
+      <div class="ambient-layer" data-theme="neutral"></div>
       <main class="stage" aria-live="polite">
         <header class="hero">
           <p class="kicker">Akvaterm Signature Journey</p>
@@ -28,14 +29,20 @@
         <section id="journey-workbench" class="card" hidden>
           <div class="status-row">
             <span id="journey-title" class="kicker"></span>
-            <span id="progress"></span>
+            <span id="progress" class="progress-count"></span>
           </div>
+
+          <ol id="progress-rail" class="progress-rail" aria-label="Journey progress"></ol>
+
           <h2 id="stage-title"></h2>
           <p id="stage-copy"></p>
 
           <div class="panel-stack">
-            <div class="panel">
-              <h3 id="step-title"></h3>
+            <div class="panel" id="step-panel">
+              <div class="panel-head">
+                <h3 id="step-title"></h3>
+                <span id="step-state" class="state-chip" data-state="engaged">Waiting for your input</span>
+              </div>
               <p id="step-copy"></p>
               <div id="step-content"></div>
             </div>
@@ -49,15 +56,20 @@
 
         <section id="handoff" class="card" hidden>
           <h2>Handoff Summary</h2>
-          <p>Your journey profile is ready for expert review.</p>
-          <pre id="handoff-json" aria-label="journey summary"></pre>
+          <p>Your journey profile is ready for expert review. Every decision below was confirmed by you.</p>
+          <dl id="handoff-summary" class="handoff-summary"></dl>
+          <pre id="handoff-json" aria-label="journey summary as structured data"></pre>
           <div class="button-row">
             <button class="btn btn-primary" id="restart-btn">Start another journey</button>
           </div>
         </section>
+
+        <footer class="stage-foot">
+          <p>Prototype — nothing leaves this device. Photos and choices stay local until you hand them to your consultant.</p>
+        </footer>
       </main>
     </div>
+    <noscript><p style="color:#f4f7fb;text-align:center">This prototype needs JavaScript enabled.</p></noscript>
     <script type="module" src="src/app.js"></script>
   </body>
 </html>
-

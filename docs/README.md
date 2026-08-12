@@ -4,10 +4,11 @@ This folder contains the pre-implementation documentation required before code c
 
 ## Phase status
 
-- Phase 0: Repository and dependency audit in progress.
-- Phase 1: Vision, experience research synthesis, and architecture research planned.
-- Phase 2: Complete documentation foundation now in draft.
-- Phase 3: Prototype and review loops pending.
+- Phase 0: Repository and dependency audit complete.
+- Phase 1: Vision, experience research synthesis, and architecture research complete.
+- Phase 2: Complete documentation foundation delivered.
+- Phase 3: Prototype and review loops in progress — motion system and real step
+  controls landed 2026-08-12; review loops continue.
 - Phase 4: Implementation pending council sign-off.
 
 ## Delivery checklist
@@ -25,7 +26,8 @@ This folder contains the pre-implementation documentation required before code c
 - [x] AI Vision Pipeline
 - [x] Recommendation Engine Architecture
 - [x] Multi-Agent Review Report
-- [ ] ADR set for all major decisions
+- [ ] ADR set for all major decisions (0001–0004 drafted; milestone 4 gate
+  decisions still open)
 
 ## Files
 

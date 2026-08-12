@@ -1,226 +1,281 @@
-const journeys = {
-  existing: {
-    id: "existing",
-    title: "Existing Bathroom",
-    subtitle: "We will rebuild your room from what already exists.",
-    steps: [
-      {
-        id: "dimensions",
-        title: "Step 1 � Room dimensions",
-        copy: "Enter the room size and share the shape so we can build a gentle first draft.",
-        actionLabel: "Set dimensions",
-      },
-      {
-        id: "door",
-        title: "Step 2 � Door placement",
-        copy: "Drag your door onto the wall position. This creates your first visual anchor.",
-        actionLabel: "Place door",
-      },
-      {
-        id: "capture",
-        title: "Step 3 � Capture walls",
-        copy: "Upload a sequence of wall photos. Each upload expands what the model can understand.",
-        actionLabel: "Upload wall photo",
-      },
-      {
-        id: "detect",
-        title: "Computer vision pass",
-        copy: "We detect fixtures and openings. You confirm each item before we continue.",
-        actionLabel: "Confirm detections",
-      },
-      {
-        id: "rebuild",
-        title: "Digital twin rebuild",
-        copy: "The model reconstructs room geometry and fixture placement progressively.",
-        actionLabel: "Review room model",
-      },
-      {
-        id: "recommend",
-        title: "Curated recommendations",
-        copy: "Receive a focused expert set based on detected constraints and your style.",
-        actionLabel: "Generate recommendations",
-      },
-    ],
-  },
-  new: {
-    id: "new",
-    title: "New Bathroom",
-    subtitle: "Start with inspiration and turn it into a feasible concept.",
-    steps: [
-      {
-        id: "inspiration",
-        title: "Inspirational direction",
-        copy: "Pick the mood that best matches your vision for the space.",
-        actionLabel: "Select mood",
-      },
-      {
-        id: "layout",
-        title: "Layout vision",
-        copy: "Choose layout intent and circulation preferences to shape the space early.",
-        actionLabel: "Choose layout",
-      },
-      {
-        id: "materials",
-        title: "Material direction",
-        copy: "Set palette, textures, and finish direction with fluid transitions.",
-        actionLabel: "Set palette",
-      },
-      {
-        id: "fixtures",
-        title: "Fixture set selection",
-        copy: "Curated products appear as grouped choices with practical fit logic.",
-        actionLabel: "Review options",
-      },
-      {
-        id: "lighting",
-        title: "Lighting and atmosphere",
-        copy: "Define brightness and ambiance, then preview the room.",
-        actionLabel: "Set lighting",
-      },
-      {
-        id: "recommend",
-        title: "Execution-ready concept",
-        copy: "Receive a realistic concept package and recommended implementation order.",
-        actionLabel: "Create handoff",
-      },
-    ],
-  },
+// app.js — journey flow state machine.
+// Orchestrates: journey selection → guided steps (each with real controls and
+// explicit interaction states) → structured handoff packet.
+// Interaction states per step: idle → engaged → satisfied. Continue stays
+// gated until the step's control reports satisfied (one decision per screen).
+
+import { journeys } from "./data.js";
+import { MotionDirector } from "./motion.js";
+import { createControl } from "./controls.js";
+
+const motion = new MotionDirector();
+
+const els = {
+  stage: document.querySelector(".stage"),
+  selector: document.getElementById("journey-selector"),
+  workbench: document.getElementById("journey-workbench"),
+  handoff: document.getElementById("handoff"),
+  journeyTitle: document.getElementById("journey-title"),
+  progress: document.getElementById("progress"),
+  progressRail: document.getElementById("progress-rail"),
+  stepState: document.getElementById("step-state"),
+  stageTitle: document.getElementById("stage-title"),
+  stageCopy: document.getElementById("stage-copy"),
+  stepPanel: document.getElementById("step-panel"),
+  stepTitle: document.getElementById("step-title"),
+  stepCopy: document.getElementById("step-copy"),
+  stepContent: document.getElementById("step-content"),
+  nextBtn: document.getElementById("next-btn"),
+  backBtn: document.getElementById("back-btn"),
+  restartBtn: document.getElementById("restart-btn"),
+  handoffSummary: document.getElementById("handoff-summary"),
+  handoffJson: document.getElementById("handoff-json"),
 };
 
-const selector = document.getElementById("journey-selector");
-const workbench = document.getElementById("journey-workbench");
-const handoff = document.getElementById("handoff");
-const journeyTitle = document.getElementById("journey-title");
-const progress = document.getElementById("progress");
-const stageTitle = document.getElementById("stage-title");
-const stageCopy = document.getElementById("stage-copy");
-const stepTitle = document.getElementById("step-title");
-const stepCopy = document.getElementById("step-copy");
-const stepContent = document.getElementById("step-content");
-const nextBtn = document.getElementById("next-btn");
-const backBtn = document.getElementById("back-btn");
-const restartBtn = document.getElementById("restart-btn");
-const handoffJson = document.getElementById("handoff-json");
+let state = null;
+let control = null;
 
-let state = {
-  journeyKey: null,
-  stepIndex: 0,
-  completed: {},
-  confirmations: {},
-};
-
-const stageDefaults = {
-  dimensions: "Measured area, wall lengths, and ceiling height are required for first draft.",
-  door: "Use drag interaction to place the door on the nearest wall segment.",
-  capture: "You can upload now or continue later; uncertainty stays gentle and visible.",
-  detect: "The system highlights every detected fixture and asks for your confirmation.",
-  rebuild: "You can correct fixture labels before moving to recommendations.",
-  recommend: "Each recommendation includes rationale and feasibility notes.",
-  inspiration: "Choose style direction from curated visual principles, not endless catalogs.",
-  layout: "Select spatial intent and circulation priorities.",
-  materials: "Pick textures with transition previews and settling animations.",
-  fixtures: "Show only shortlists from real supplier groups.",
-  lighting: "Preview warm-cool balance and evening atmosphere.",
-};
-
-function pickJourney(key) {
-  const j = journeys[key];
-  state = {
-    journeyKey: key,
+function freshState(journeyKey) {
+  return {
+    journeyKey,
     stepIndex: 0,
-    completed: {},
-    confirmations: {
-      journey: j.title,
-      startedAt: new Date().toISOString(),
-      steps: [],
-      notes: [],
-    },
+    values: {}, // clean value snapshots per completed step
+    working: {}, // live control state per step (survives Back/forward)
+    meta: {}, // per-step confirmation records
+    startedAt: new Date().toISOString(),
   };
-
-  selector.hidden = true;
-  handoff.hidden = true;
-  workbench.hidden = false;
-  journeyTitle.textContent = j.title;
-  stageTitle.textContent = j.subtitle;
-  stageCopy.textContent = "You can move at your pace; we keep context and never rush the pace.";
-  renderStep();
 }
 
 function currentJourney() {
   return journeys[state.journeyKey];
 }
 
-function renderStep() {
+function currentStep() {
+  return currentJourney().steps[state.stepIndex];
+}
+
+// ---------------------------------------------------------------------------
+// Progress rail — always-visible journey state.
+
+function renderRail() {
   const j = currentJourney();
-  const step = j.steps[state.stepIndex];
+  els.progressRail.replaceChildren(
+    ...j.steps.map((step, i) => {
+      const li = document.createElement("li");
+      li.className =
+        i < state.stepIndex ? "rail-step rail-step--done" : i === state.stepIndex ? "rail-step rail-step--current" : "rail-step";
+      if (i === state.stepIndex) li.setAttribute("aria-current", "step");
+      const dot = document.createElement("span");
+      dot.className = "rail-dot";
+      dot.setAttribute("aria-hidden", "true");
+      const label = document.createElement("span");
+      label.className = "rail-label";
+      label.textContent = step.title.includes("·") ? step.title.split("·").pop().trim() : step.title;
+      li.append(dot, label);
+      return li;
+    })
+  );
+}
 
-  progress.textContent = `${state.stepIndex + 1} / ${j.steps.length}`;
-  stageTitle.textContent = `${j.title} � ${step.title}`;
-  stageCopy.textContent = stageDefaults[step.id] || "";
-  stepTitle.textContent = "Ready for your choice";
-  stepCopy.textContent = step.copy;
+// ---------------------------------------------------------------------------
+// Step lifecycle.
 
-  stepContent.innerHTML = `
-    <div class="step-tile">${step.actionLabel}</div>
-  `;
+function updateGate() {
+  const satisfied = control && control.isSatisfied();
+  els.nextBtn.disabled = !satisfied;
+  els.stepState.textContent = satisfied ? "Ready to continue" : "Waiting for your input";
+  els.stepState.dataset.state = satisfied ? "satisfied" : "engaged";
+}
 
-  backBtn.disabled = state.stepIndex === 0;
-  nextBtn.disabled = false;
+function mountStep() {
+  const j = currentJourney();
+  const step = currentStep();
+
+  els.progress.textContent = `${state.stepIndex + 1} / ${j.steps.length}`;
+  renderRail();
+  els.stageTitle.textContent = `${j.title} · ${step.title.includes("·") ? step.title.split("·").pop().trim() : step.title}`;
+  els.stageCopy.textContent = step.stage || "";
+  els.stepTitle.textContent = step.title;
+  els.stepCopy.textContent = step.copy;
+
+  if (step.kind !== "lighting") motion.clearLightingPreview();
+
+  const ctx = {
+    motion,
+    values: { ...state.values },
+    own: (defaults) => {
+      if (!state.working[step.id]) state.working[step.id] = defaults;
+      return state.working[step.id];
+    },
+    onChange: updateGate,
+  };
+  control = createControl(step, ctx);
+  els.stepContent.replaceChildren(control.el);
+
+  els.backBtn.disabled = state.stepIndex === 0;
+  els.nextBtn.textContent = state.stepIndex === j.steps.length - 1 ? "Complete journey" : "Continue";
+  updateGate();
+}
+
+function renderStep(direction = 1) {
+  motion.stepTransition(els.stepPanel, mountStep, direction);
 }
 
 function completeStep() {
+  if (!control || !control.isSatisfied()) return;
   const j = currentJourney();
-  const step = j.steps[state.stepIndex];
-  state.confirmations.steps.push({
+  const step = currentStep();
+
+  state.values[step.id] = control.value();
+  state.meta[step.id] = {
     id: step.id,
     label: step.title,
+    summary: control.summary(),
     confirmedAt: new Date().toISOString(),
-  });
+  };
+  motion.focusShift(els.stepPanel);
 
   if (state.stepIndex === j.steps.length - 1) {
     renderHandoff();
     return;
   }
-
   state.stepIndex += 1;
-  renderStep();
+  renderStep(1);
 }
 
 function goBack() {
-  if (state.stepIndex === 0) {
-    return;
-  }
+  if (state.stepIndex === 0) return;
   state.stepIndex -= 1;
-  renderStep();
+  renderStep(-1);
 }
 
-function renderHandoff() {
-  state.completed[state.journeyKey] = true;
-  const payload = {
-    journey: currentJourney().title,
-    completedSteps: state.confirmations.steps.length,
-    timeline: state.confirmations,
-    status: "ready-for-handoff",
-  };
+// ---------------------------------------------------------------------------
+// Journey selection and reset.
 
-  workbench.hidden = true;
-  handoff.hidden = false;
-  handoffJson.textContent = JSON.stringify(payload, null, 2);
+function pickJourney(key) {
+  state = freshState(key);
+  control = null;
+  const j = currentJourney();
+
+  motion.setAmbient(j.ambient); // color/lighting cues precede structural change
+  els.selector.hidden = true;
+  els.handoff.hidden = true;
+  els.workbench.hidden = false;
+  els.journeyTitle.textContent = j.title;
+  motion.sceneShift(els.stage);
+  renderStep(1);
 }
 
 function reset() {
-  selector.hidden = false;
-  workbench.hidden = true;
-  handoff.hidden = true;
+  state = null;
+  control = null;
+  motion.clearLightingPreview();
+  motion.setAmbient("neutral");
+  els.selector.hidden = false;
+  els.workbench.hidden = true;
+  els.handoff.hidden = true;
+  motion.panelBloom(els.selector);
 }
 
-document.querySelectorAll('[data-select]').forEach((button) => {
+// ---------------------------------------------------------------------------
+// Handoff packet — structured per docs/information-architecture.md.
+
+function buildPacket() {
+  const j = currentJourney();
+  const v = state.values;
+  const dims = v.dimensions || null;
+  const isExisting = state.journeyKey === "existing";
+
+  const walls = dims
+    ? [
+        { id: "north", lengthCm: Number(dims.widthCm) },
+        { id: "south", lengthCm: Number(dims.widthCm) },
+        { id: "east", lengthCm: Number(dims.lengthCm) },
+        { id: "west", lengthCm: Number(dims.lengthCm) },
+      ]
+    : null;
+
+  return {
+    project: {
+      id: `akv-${Date.now().toString(36)}`,
+      flowType: state.journeyKey,
+      startedAt: state.startedAt,
+      dimensionsCm: dims,
+      locationContext: null,
+    },
+    space: dims
+      ? {
+          walls,
+          openings: v.door ? [{ type: "door", wall: v.door.wall, offsetPct: v.door.offsetPct }] : [],
+          baseline: { floor: "existing", ceilingCm: Number(dims.heightCm) },
+        }
+      : null,
+    fixtureDetection: v.detect
+      ? v.detect.items.map((i) => ({
+          type: i.type,
+          wall: i.wall,
+          confidence: i.confidence,
+          status: i.status,
+          userVerified: i.userVerified,
+        }))
+      : [],
+    styleProfile: isExisting
+      ? { primaryStyle: "guided modernization", source: "existing-flow" }
+      : {
+          primaryStyle: v.inspiration && v.inspiration.mood ? v.inspiration.mood.name : null,
+          layoutIntent: v.layout ? v.layout.layoutId : null,
+          circulation: v.layout ? v.layout.circulation : null,
+        },
+    materialProfile: isExisting
+      ? null
+      : {
+          wall: v.materials && v.materials.wall ? v.materials.wall.name : null,
+          floor: v.materials && v.materials.floor ? v.materials.floor.name : null,
+          fixtures: v.fixtures || null,
+          lighting: v.lighting || null,
+        },
+    recommendations: isExisting
+      ? (v.recommend && v.recommend.selected) || []
+      : { conceptApproved: Boolean(v.recommend && v.recommend.approved), implementationOrder: (v.recommend && v.recommend.implementationOrder) || [] },
+    handoffPacket: {
+      journey: j.title,
+      completedSteps: Object.values(state.meta),
+      constraints:
+        v.capture && v.capture.sketchMode ? ["guided-sketch mode — verify measurements on site"] : [],
+      notes: [],
+      status: "ready-for-handoff",
+    },
+  };
+}
+
+function renderHandoff() {
+  const packet = buildPacket();
+
+  els.workbench.hidden = true;
+  els.handoff.hidden = false;
+  motion.clearLightingPreview();
+
+  els.handoffSummary.replaceChildren(
+    ...Object.values(state.meta).flatMap((m) => {
+      const dt = document.createElement("dt");
+      dt.textContent = m.label;
+      const dd = document.createElement("dd");
+      dd.textContent = m.summary;
+      return [dt, dd];
+    })
+  );
+  els.handoffJson.textContent = JSON.stringify(packet, null, 2);
+  motion.panelBloom(els.handoff);
+}
+
+// ---------------------------------------------------------------------------
+
+document.querySelectorAll("[data-select]").forEach((button) => {
   button.addEventListener("click", (event) => {
     pickJourney(event.currentTarget.dataset.select);
   });
 });
 
-nextBtn.addEventListener("click", completeStep);
-backBtn.addEventListener("click", goBack);
-restartBtn.addEventListener("click", reset);
-
+els.nextBtn.addEventListener("click", completeStep);
+els.backBtn.addEventListener("click", goBack);
+els.restartBtn.addEventListener("click", reset);
