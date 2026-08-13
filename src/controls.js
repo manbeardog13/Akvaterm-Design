@@ -389,13 +389,23 @@ function captureControl(step, ctx) {
       accept: "image/*",
       class: "visually-hidden",
       id: `capture-${w.id}`,
-      onChange: (e) => {
+    onChange: (e) => {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         if (v.photos[w.id] && v.photos[w.id].url) URL.revokeObjectURL(v.photos[w.id].url);
-        v.photos[w.id] = { name: file.name, url: URL.createObjectURL(file) };
-        v.sketchMode = false;
-        update();
+        const reader = new FileReader();
+        reader.onload = () => {
+          v.photos[w.id] = {
+            name: file.name,
+            type: file.type || "image/jpeg",
+            size: file.size,
+            dataUrl: typeof reader.result === "string" ? reader.result : "",
+            url: URL.createObjectURL(file),
+          };
+          v.sketchMode = false;
+          update();
+        };
+        reader.readAsDataURL(file);
       },
     });
     const removeBtn = h("button", {
@@ -486,6 +496,11 @@ function captureControl(step, ctx) {
       consent: v.consent,
       sketchMode: v.sketchMode,
       capturedWalls: Object.keys(v.photos),
+      photoPayloads: Object.fromEntries(
+        Object.entries(v.photos)
+          .filter(([, p]) => !!p?.dataUrl)
+          .map(([k, p]) => [k, { name: p.name, type: p.type, dataUrl: p.dataUrl }])
+      ),
       photoNames: Object.fromEntries(Object.entries(v.photos).map(([k, p]) => [k, p.name])),
     }),
     summary: () => (v.sketchMode ? "guided sketch mode" : `${photoCount()} wall photo(s), consent given`),
@@ -729,7 +744,10 @@ function detectControl(step, ctx) {
     progressLine.hidden = false;
     progressLine.textContent = "Preparing analysis…";
     const result = await VisionService.detect(
-      { walls: capture.capturedWalls || [], photosByWall: capture.photoNames || {} },
+      {
+        walls: capture.capturedWalls || [],
+        photosByWall: capture.photoPayloads && Object.keys(capture.photoPayloads).length ? capture.photoPayloads : capture.photoNames || {},
+      },
       {
         onProgress: (p) => {
           progressLine.textContent = `${p.stage} — step ${p.index} of ${p.total}. Nothing is accepted without you.`;

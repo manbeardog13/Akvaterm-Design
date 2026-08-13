@@ -14,9 +14,11 @@ Premium bathroom renovation journey for local renovation customers.
 
 ## Repository status
 
-- Stage: Milestone 3 interactive pass complete; milestone 4 scaffolded — vision
-  adapter boundary, second-angle flow, isometric reconstruction view, and
-  confidence-aware handoff exports (ADR 0005–0007, mock adapter).
+- Stage: Milestone 3 interactive pass complete; milestone 4 scaffolded
+  - vision adapter boundary
+  - second-angle flow
+  - isometric reconstruction view
+  - confidence-aware handoff exports
 - Canonical remote: https://github.com/manbeardog13/Akvaterm-Design.git
 
 ## Documentation
@@ -38,8 +40,26 @@ python -m http.server 8000
 # then visit http://localhost:8000
 ```
 
-No build step and no dependencies — a static server is only needed because the
+No build step and no dependencies: a static server is only needed because the
 app uses native ES modules, which browsers block over `file://`.
+
+## Public deployment (Vercel)
+
+The app is deployable as a static front end with a serverless endpoint at
+`/api/vision`.
+
+1. Push this repository to GitHub.
+2. Import into Vercel with framework preset set to `Other`.
+3. Configure project environment variables:
+   - `GEMINI_API_KEY` (required for remote vision)
+   - `GEMINI_MODEL` (optional, defaults to `gemini-1.5-flash`)
+4. Deploy.
+
+`/api/vision` uses environment variables only. Keep API keys in your deployment
+environment and never commit a keys file.
+
+For local preview with remote-adapter emulation, set the same variables in your
+local process before launching a static server.
 
 ## Development checks
 

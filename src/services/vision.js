@@ -1,18 +1,35 @@
-// vision.js — VisionService: the pluggable adapter boundary for AI-assisted
+// vision.js â€” VisionService: the pluggable adapter boundary for AI-assisted
 // reconstruction (ADR 0006, milestone 4). Adapters are swappable; the mock
-// adapter is the default until a real vision backend exists. Safety contract
-// (docs/ai-vision-pipeline.md): adapters return detections in "pending" state,
-// nothing is ever pre-accepted, and every item waits for an explicit user
-// decision in the UI. Recommendations never attach below the confidence floor.
+// adapter remains the local fallback. A remote adapter calls `/api/vision` and
+// requires deployment env vars (publicly hosted, private key kept server-side).
 
 import { CONFIDENCE_FLOOR, mockDetections } from "../data.js";
 
 const adapters = new Map();
-let activeName = null;
+const ADAPTER_REMOTE = "remote-gemini";
+const ADAPTER_MOCK = "mock";
+
+let activeName = ADAPTER_MOCK;
+let remoteProbeInFlight = null;
+const API_TIMEOUT_MS = 12000;
+const PIPELINE_STAGES = [
+  "Ingesting photos",
+  "Normalising perspective",
+  "Detecting fixtures",
+  "Scoring confidence",
+];
+
+function clampNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function safeDataURL(item) {
+  return typeof item?.dataUrl === "string" && item.dataUrl.startsWith("data:") ? item.dataUrl : "";
+}
 
 export function registerVisionAdapter(name, adapter) {
   adapters.set(name, adapter);
-  if (!activeName) activeName = name;
 }
 
 export function useVisionAdapter(name) {
@@ -24,43 +41,6 @@ export function activeVisionAdapter() {
   return activeName;
 }
 
-const PIPELINE_STAGES = [
-  "Ingesting photos",
-  "Normalising perspective",
-  "Detecting fixtures",
-  "Scoring confidence",
-];
-
-export const VisionService = {
-  // request: { walls: string[], photosByWall?: Record<wallId, fileName> }
-  // Resolves to { adapter, confidenceFloor, buckets, detections[] }.
-  // onProgress receives { stage, index, total } — the UI shows stage context,
-  // never a context-free spinner (docs/motion-language.md anti-patterns).
-  async detect(request, { onProgress } = {}) {
-    const adapter = adapters.get(activeName);
-    if (!adapter) throw new Error("No vision adapter registered");
-    for (let i = 0; i < PIPELINE_STAGES.length; i += 1) {
-      if (onProgress) onProgress({ stage: PIPELINE_STAGES[i], index: i + 1, total: PIPELINE_STAGES.length });
-      await adapter.stageDelay(i);
-    }
-    const detections = await adapter.detect(request);
-    return {
-      adapter: activeName,
-      confidenceFloor: CONFIDENCE_FLOOR,
-      buckets: bucketize(detections),
-      detections,
-    };
-  },
-
-  // A second-angle photo for one low-confidence detection. Returns the new
-  // confidence; the detection still requires an explicit user decision.
-  async requestSecondAngle(detection, photoMeta) {
-    const adapter = adapters.get(activeName);
-    if (!adapter) throw new Error("No vision adapter registered");
-    return adapter.secondAngle(detection, photoMeta);
-  },
-};
-
 export function bucketize(detections) {
   return {
     high: detections.filter((d) => d.confidence >= 0.75).length,
@@ -69,13 +49,175 @@ export function bucketize(detections) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Mock adapter — deterministic stand-in until a real backend is ratified.
+function normalizeDetections(detections) {
+  return detections.map((item, idx) => ({
+    id: item.id || `remote-${idx + 1}`,
+    type: item.type || "Fixture",
+    confidence: clampNumber(item.confidence, 0),
+    wall: item.wall || "north",
+    at: clampNumber(item.at, 0.5),
+    size: clampNumber(item.size, 0.12),
+    status: item.status || "pending",
+    userVerified: Boolean(item.userVerified),
+  }));
+}
 
-registerVisionAdapter("mock", {
+function mockResult(request) {
+  const detections = mockDetections(request.walls || []);
+  return {
+    adapter: ADAPTER_MOCK,
+    confidenceFloor: CONFIDENCE_FLOOR,
+    detections,
+  };
+}
+
+async function callVisionEndpoint(payload) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try {
+    const response = await fetch("/api/vision", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Vision API responded ${response.status}`);
+    }
+    return response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function buildPhotoPayload(request) {
+  const payload = {};
+  const photosByWall = request.photosByWall || {};
+  for (const [wall, value] of Object.entries(photosByWall)) {
+    payload[wall] = {
+      name: value?.name || `photo-${wall}.jpg`,
+      type: value?.type || "image/jpeg",
+      dataUrl: safeDataURL(value),
+    };
+  }
+  return payload;
+}
+
+async function tryRemoteDetect(request, { onProgress } = {}) {
+  for (let i = 0; i < PIPELINE_STAGES.length; i += 1) {
+    if (onProgress) onProgress({ stage: PIPELINE_STAGES[i], index: i + 1, total: PIPELINE_STAGES.length });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+  const result = await callVisionEndpoint({
+    action: "detect",
+    request: {
+      walls: request.walls || [],
+      photosByWall: buildPhotoPayload(request),
+    },
+  });
+  return {
+    adapter: ADAPTER_REMOTE,
+    confidenceFloor: clampNumber(result.confidenceFloor, CONFIDENCE_FLOOR),
+    detections: normalizeDetections(result.detections || []),
+  };
+}
+
+export const VisionService = {
+  async detect(request, { onProgress } = {}) {
+    const adapter = adapters.get(activeName);
+    if (!adapter) throw new Error("No vision adapter registered");
+
+    try {
+      const result = await adapter.detect(request, { onProgress });
+      return {
+        adapter: result.adapter || activeName,
+        confidenceFloor: result.confidenceFloor ?? CONFIDENCE_FLOOR,
+        buckets: bucketize(result.detections || []),
+        detections: result.detections || [],
+      };
+    } catch (error) {
+      if (activeName === ADAPTER_REMOTE) {
+        const fallback = mockResult(request);
+        return {
+          adapter: fallback.adapter,
+          confidenceFloor: fallback.confidenceFloor,
+          buckets: bucketize(fallback.detections),
+          detections: fallback.detections,
+        };
+      }
+      throw error;
+    }
+  },
+
+  async requestSecondAngle(detection, photoMeta) {
+    const adapter = adapters.get(activeName);
+    if (!adapter) throw new Error("No vision adapter registered");
+    try {
+      return adapter.secondAngle(detection, photoMeta);
+    } catch (error) {
+      if (activeName === ADAPTER_REMOTE) {
+        return adapters.get(ADAPTER_MOCK).secondAngle(detection, photoMeta);
+      }
+      throw error;
+    }
+  },
+};
+
+export async function initializeVisionAdapter() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("vision") === "mock") {
+    activeName = ADAPTER_MOCK;
+    return;
+  }
+  if (params.get("vision") === "remote") {
+    activeName = ADAPTER_REMOTE;
+    return;
+  }
+
+  const host = window.location.hostname || "";
+  if (window.location.protocol === "file:" || host === "localhost" || host === "127.0.0.1" || host === "::1") {
+    activeName = ADAPTER_MOCK;
+    return;
+  }
+
+  if (!remoteProbeInFlight) {
+    remoteProbeInFlight = (async () => {
+      try {
+        const result = await callVisionEndpoint({ action: "health" });
+        activeName = result?.ok ? ADAPTER_REMOTE : ADAPTER_MOCK;
+      } catch (_) {
+        activeName = ADAPTER_MOCK;
+      }
+    })();
+  }
+  await remoteProbeInFlight;
+  remoteProbeInFlight = null;
+}
+
+registerVisionAdapter(ADAPTER_MOCK, {
   stageDelay: () => new Promise((resolve) => setTimeout(resolve, 90)),
-  detect: async (request) => mockDetections(request.walls || []),
+  detect: async (request) => mockResult(request),
   secondAngle: async (detection) => ({
-    confidence: Math.min(0.97, detection.confidence + 0.34),
+    confidence: Math.min(0.97, clampNumber(detection.confidence, 0) + 0.34),
   }),
+});
+
+registerVisionAdapter(ADAPTER_REMOTE, {
+  stageDelay: () => new Promise((resolve) => setTimeout(resolve, 120)),
+  detect: tryRemoteDetect,
+  secondAngle: async (detection, photoMeta) => {
+    const result = await callVisionEndpoint({
+      action: "second-angle",
+      detection,
+      photo: { name: photoMeta?.name || "capture.jpg" },
+    });
+    return {
+      confidence: clampNumber(result.confidence, clampNumber(detection.confidence, 0)),
+    };
+  },
 });

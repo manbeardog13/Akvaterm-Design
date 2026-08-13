@@ -7,8 +7,10 @@
 import { journeys } from "./data.js";
 import { MotionDirector } from "./motion.js";
 import { createControl } from "./controls.js";
+import { initializeVisionAdapter } from "./services/vision.js";
 
 const motion = new MotionDirector();
+void initializeVisionAdapter();
 
 const els = {
   stage: document.querySelector(".stage"),
