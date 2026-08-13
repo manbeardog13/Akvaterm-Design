@@ -24,7 +24,7 @@ Premium bathroom renovation journey for local renovation customers.
 
 ## Working agreements
 
-AI collaborators and their humans: read [AGENTS.md](AGENTS.md) before your
+AI collaborators and their humans: read [COLLABORATION.md](COLLABORATION.md) before your
 first change. It carries the binding ADRs, hard constraints, workflow rules,
 and usage instructions for this repository.
 

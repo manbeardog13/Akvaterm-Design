@@ -1,6 +1,8 @@
-# AGENTS.md — rules of engagement for AI-assisted work on this repository
+# COLLABORATION.md — rules of engagement for AI-assisted work on this repository
 
 This file is for any AI assistant (and its human) working on Akvaterm-Design.
+`AGENTS.md` is deliberately left free: Codex treats that filename as its own
+instruction file, so these shared cross-tool rules live here instead.
 It encodes the working agreements already in force. Read it fully before your
 first change. The owner is Toni (@manbeardog13); he holds final authority on
 scope, ADR acceptance, and anything public.
