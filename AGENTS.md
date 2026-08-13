@@ -41,9 +41,18 @@ scope, ADR acceptance, and anything public.
   green: `npm test` must pass locally before any push (see §5). Substantive or
   risky changes go on a branch with a pull request for the owner.
 - Never force-push, rebase, or otherwise rewrite published history on `main`.
+- **Re-read before you write.** More than one agent works in this checkout.
+  `git pull` and re-read every file you are about to touch immediately before
+  editing it — never write a file from a copy you read earlier in your session.
+  Editing from a stale copy silently reverts the other agent's work, and
+  `git add -A` will happily commit that revert. This has already happened once
+  (see commit history around `7c4e213`).
 - Preserve inherited work: if you find uncommitted changes in a working tree,
   checkpoint them as their own commit before adding yours — do not reset,
   clean, or absorb them silently.
+- Prefer narrow staging (`git add <paths>`) over `git add -A`, and read
+  `git diff --staged` before every commit. If the diff removes something you
+  did not intend to remove, stop.
 - Keep the tree tidy: no build artifacts, scratch files, or editor droppings.
   `.gitignore` already covers `node_modules/` and `tests/screenshots/`.
 - Never commit secrets, tokens, or credentials. There are none in this repo;
@@ -82,15 +91,16 @@ npm test                          # 56-check E2E suite; must pass before pushing
 
 Add checks in `tests/e2e.mjs` for any new interaction you introduce.
 
-Deployment: Vercel serves the repo root statically — `vercel.json` pins
-install and build to no-ops, so nothing is compiled and no dependency is
-installed at deploy time. Pushing to `main` deploys automatically; manual
-redeploys happen from the Vercel dashboard. Live URL: see "Hosting" in
-`README.md`.
+Deployment: Vercel, framework preset `Other` — the front end is served
+statically from the repo root with no build step, plus one serverless endpoint,
+`api/vision.js`, declared in `vercel.json`. Pushing to `main` redeploys.
+Deployment setup is documented in `README.md` under "Public deployment".
 
-Do not add a build step, a framework preset, or environment variables to the
-Vercel project without an ADR. This project needs no API keys of any kind —
-if a deploy form offers to "detect" some, remove them.
+Environment variables: `GEMINI_API_KEY` and optional `GEMINI_MODEL`, set in the
+Vercel project only — never committed, and `.env.example` carries placeholders
+only. Without a key the endpoint degrades to the built-in detection set rather
+than failing, so a keyless deploy is a valid state. Do not add a build step, a
+framework preset, or further environment variables without an ADR.
 
 ## 6. Repository map
 
